@@ -1,2 +1,12 @@
 .env
 mongodb/*
+
+#exe
+backend/qr-fns-exporter
+
+#tmp
+tmp/
+
+#claude
+.omc/
+
