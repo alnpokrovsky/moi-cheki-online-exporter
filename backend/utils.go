@@ -1,142 +1,17 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"github.com/skip2/go-qrcode"
-	"io"
-	"log"
 	"math"
-	"net/http"
-	"time"
+
+	"github.com/skip2/go-qrcode"
 )
 
-// APIResponseError — тип ошибки, который включает HTTP-статус и сообщение.
-type APIResponseError struct {
-	StatusCode int
-	Message    string
-}
-
-func (e *APIResponseError) Error() string {
-	return fmt.Sprintf("API responded with %d: %s", e.StatusCode, e.Message)
-}
-
-// Function to format the datetime string
-func formatDateTime(dateTime string) string {
-	t, err := time.Parse("2006-01-02T15:04:05", dateTime)
-	if debugMode {
-		if err != nil {
-			log.Printf("DEBUG: error parsing time: %v", err)
-		} else {
-			log.Printf("DEBUG: time is: %s", t)
-			log.Printf("DEBUG: time formatted is: %s", t.Format("20060102T1504"))
-		}
-	}
-
-	if err != nil {
-		return dateTime
-	}
-	return t.Format("20060102T1504")
-}
-
-// Преобразование суммы с использованием функции округления
+// RoundToFloat64 округляет значение до двух знаков после запятой.
 func RoundToFloat64(value float64) float64 {
-	return math.Round(value * 100) // Умножаем на 100 и округляем
+	return math.Round(value*100) / 100
 }
 
-// Function to get receipts
-func getReceipts(dateFrom, dateTo string) ([]Receipt, error) {
-	client := &http.Client{}
-	data := fmt.Sprintf(`{"limit":10000,"offset":0,"dateFrom":"%s","dateTo":"%s","orderBy":"CREATED_DATE:ASC"}`, dateFrom, dateTo)
-	req, err := http.NewRequest("POST", fnsApiUrl+"/api/v1/receipt", bytes.NewBuffer([]byte(data)))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-
-	if debugMode {
-		log.Printf("DEBUG: Request Type: POST")
-		log.Printf("DEBUG: Request URL: %s", req.URL)
-		log.Printf("DEBUG: Request Body: %s", data)
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	if debugMode {
-		log.Printf("DEBUG: Response Status: %d", resp.StatusCode)
-		log.Printf("DEBUG: Response Body: %s", string(body))
-	}
-
-	// Если статус, полученный от API, не 200, возвращаем ошибку с этим статусом.
-	if resp.StatusCode != http.StatusOK {
-		return nil, &APIResponseError{StatusCode: resp.StatusCode, Message: string(body)}
-	}
-
-	var receiptResponse ReceiptResponse
-	err = json.Unmarshal(body, &receiptResponse)
-	if err != nil {
-		return nil, err
-	}
-	return receiptResponse.Receipts, nil
-}
-
-// Function to get fiscal data for a receipt
-func getFiscalData(key string) (*FiscalDataResponse, error) {
-	client := &http.Client{}
-	data := fmt.Sprintf(`{"key":"%s"}`, key)
-	req, err := http.NewRequest("POST", fnsApiUrl+"/api/v1/receipt/fiscal_data", bytes.NewBuffer([]byte(data)))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-
-	if debugMode {
-		log.Printf("DEBUG: Request Type: POST")
-		log.Printf("DEBUG: Request URL: %s", req.URL)
-		log.Printf("DEBUG: Request Body: %s", data)
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	if debugMode {
-		log.Printf("DEBUG: Response Status: %d", resp.StatusCode)
-		log.Printf("DEBUG: Response Body: %s", string(body))
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, &APIResponseError{StatusCode: resp.StatusCode, Message: string(body)}
-	}
-
-	var fiscalDataResponse FiscalDataResponse
-	err = json.Unmarshal(body, &fiscalDataResponse)
-	if err != nil {
-		return nil, err
-	}
-	return &fiscalDataResponse, nil
-}
-
-// Function to generate QR code
+// generateQRCode генерирует QR-код для заданного текста.
 func generateQRCode(text string) ([]byte, error) {
 	qrCode, err := qrcode.Encode(text, qrcode.Medium, 256)
 	if err != nil {

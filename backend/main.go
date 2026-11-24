@@ -38,6 +38,12 @@ func initMongoDB() (*mongo.Client, *mongo.Collection, error) {
 }
 
 func main() {
+	// Загружаем и валидируем конфигурацию из переменных окружения
+	cfg, err := LoadConfig()
+	if err != nil {
+		log.Fatalf("Ошибка конфигурации: %v", err)
+	}
+
 	// Инициализируем подключение к MongoDB
 	client, collection, err := initMongoDB()
 	if client != nil {
@@ -47,8 +53,23 @@ func main() {
 		log.Printf("MongoDB не доступна: %v", err)
 	}
 
-	// Используем глобальную переменную mongoCollection, которая уже объявлена, например, в handlers.go
+	// Используем глобальную переменную mongoCollection
 	mongoCollection = collection
+
+	// Формируем информацию об устройстве из конфигурации
+	deviceInfo := DeviceInfo{
+		SourceDeviceId: cfg.DeviceID,
+		SourceType:     "WEB",
+		AppVersion:     "1.0.0",
+		MetaDetails: struct {
+			UserAgent string `json:"userAgent"`
+		}{
+			UserAgent: cfg.UserAgent,
+		},
+	}
+
+	// Создаём HTTP-клиент API
+	apiClient := NewClient(cfg.APIURL, deviceInfo, cfg.RefreshToken, cfg.DebugMode)
 
 	router := gin.Default()
 
@@ -65,8 +86,7 @@ func main() {
 		}
 	})
 
-	router.Use(checkTokenExpiration())
-	router.POST("/generate", handleGenerate)
+	router.POST("/generate", handleGenerate(apiClient))
 
-	router.Run(":8080")
+	router.Run(":" + cfg.Port)
 }
